@@ -8,5 +8,8 @@ $(NAME).bit:  $(NAME)_run.tcl $(NAME).xpr
 $(NAME).xpr: $(NAME).tcl
 	vivado -mode batch -source $<
 
+%.edif: %.ys
+	yosys -q -s $?
+
 build-gui: $(NAME).xpr
 	vivado $<
