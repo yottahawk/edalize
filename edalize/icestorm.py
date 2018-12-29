@@ -75,3 +75,6 @@ class Icestorm(Edatool):
         self.render_template('icestorm-makefile.j2',
                              'Makefile',
                              template_vars)
+        self.render_template('icestorm-sh.j2',
+                             'build.sh',
+                             template_vars)
