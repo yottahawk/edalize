@@ -10,6 +10,7 @@ setup(
     packages=['edalize'],
     package_data = {'edalize' : [
         'templates/alintpro/alintpro.do.j2',
+        'templates/vunit/run.py.j2',
         'templates/icestorm/icestorm-makefile.j2',
         'templates/spyglass/Makefile.j2',
         'templates/spyglass/spyglass-project.prj.j2',
