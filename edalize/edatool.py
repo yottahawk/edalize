@@ -34,14 +34,6 @@ def jinja_filter_param_value_str(value, str_quote_style="", bool_is_str=False):
     else:
         return str(value)
 
-
-class FileAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        path = os.path.expandvars(values[0])
-        path = os.path.expanduser(path)
-        path = os.path.abspath(path)
-        setattr(namespace, self.dest, [path])
-
 class Edatool(object):
 
     def __init__(self, edam=None, work_root=None, eda_api=None):
@@ -101,7 +93,7 @@ class Edatool(object):
             logger.warning("Invalid API version '{}' for get_tool_options".format(api_ver))
 
     def configure(self, args):
-        logger.info("Setting up project")
+        logger.info("Configuring...")
         self.configure_pre(args)
         self.configure_main()
         self.configure_post()
@@ -116,6 +108,7 @@ class Edatool(object):
         pass
 
     def build(self):
+        logger.info("Building...")
         self.build_pre()
         self.build_main()
         self.build_post()
@@ -153,40 +146,62 @@ class Edatool(object):
     def parse_args(self, args, paramtypes):
         if self.parsed_args:
             return
+
+        # Setup the parser, setting the name to match the cmd-line invocation
+        progname = os.path.basename(sys.argv[0]) + ' run {}'.format(self.name)
+        parser = argparse.ArgumentParser(prog = progname,
+                                         conflict_handler='resolve')
+
+        class FileAction(argparse.Action):
+            """ Custom parser-action for files, which post-processes 'Parameters' with a 'file'-'datatype' into valid paths"""
+            def __call__(self, parser, namespace, values, option_string=None):
+                path = os.path.expandvars(values[0])
+                path = os.path.expanduser(path)
+                path = os.path.abspath(path)
+                setattr(namespace, self.dest, [path])
+        # Define possible 'datatypes' for the 'Parameters' items, to automate parser type-checking
         typedict = {'bool' : {'action' : 'store_true'},
                     'file' : {'type' : str , 'nargs' : 1, 'action' : FileAction},
                     'int'  : {'type' : int , 'nargs' : 1},
                     'str'  : {'type' : str , 'nargs' : 1},
                     }
-        progname = os.path.basename(sys.argv[0]) + ' run {}'.format(self.name)
-
-        parser = argparse.ArgumentParser(prog = progname,
-                                         conflict_handler='resolve')
-        param_groups = {}
+        # Define 'paramtypes' indicating where the 'Parameter' is applied in the build, and give descriptions for the cmd-line help output
         _descr = {'plusarg'    : 'Verilog plusargs (Run-time option)',
                   'vlogparam'  : 'Verilog parameters (Compile-time option)',
                   'vlogdefine' : 'Verilog defines (Compile-time global symbol)',
                   'generic'    : 'VHDL generic (Run-time option)',
                   'cmdlinearg' : 'Command-line arguments (Run-time option)'}
+
+        # These dicts save which arguments are actually present, so the parser only displays info for present types
+        param_groups = {}
         param_type_map = {}
 
+        # Add all parameters optioned under the target to the parser
         for name, param in self.parameters.items():
+            # Get description and paramtype from the edam file...
             _description = param.get('description', "No description")
             _paramtype = param['paramtype']
-            if _paramtype in paramtypes:
+            if _paramtype not in paramtypes:
+                logging.warn("Parameter '{}' has unsupported type '{}' for requested backend".format(name, _paramtype))
+            else:
+                # Create argument_groups dict for each present 'paramtypes'
                 if not _paramtype in param_groups:
                     param_groups[_paramtype] = \
                     parser.add_argument_group(_descr[_paramtype])
 
+                # Set the default value of the parameter if it is given
                 default = None
                 if not param.get('default') is None:
                     try:
                         if param['datatype'] == 'bool':
                             default = param['default']
                         else:
+                            # Cast the input to the correct type from the 'typedict' entry
                             default = [typedict[param['datatype']]['type'](param['default'])]
                     except KeyError as e:
                         pass
+
+                # Add the parser argument to the previously-created group
                 try:
                     param_groups[_paramtype].add_argument('--'+name,
                                                                help=_description,
@@ -195,11 +210,10 @@ class Edatool(object):
                 except KeyError as e:
                     raise RuntimeError("Invalid data type {} for parameter '{}'".format(str(e),
                                                                                         name))
+                # Create dict of all present paramtypes for later parsing values into
                 param_type_map[name.replace('-','_')] = _paramtype
-            else:
-                logging.warn("Parameter '{}' has unsupported type '{}' for requested backend".format(name, _paramtype))
 
-        #backend_args.
+        # Add backend_args (tool_options) to parser by pulling them from the backend class definition via .get_doc(cls, version)
         backend_args = parser.add_argument_group("Backend arguments")
         _opts = self.__class__.get_doc(0)
         for _opt in _opts.get('members', []) + _opts.get('lists', []):
@@ -252,6 +266,13 @@ class Edatool(object):
             f.write(template.render(template_vars))
 
     def _get_fileset_files(self, force_slash=False):
+        """ Gets all src_files and include_directories from the eda.yml file
+
+        :param force_slash: Replaces all backslashes with forwardslashes in paths
+
+        :returns: (src_files, incdirs) - A tuple containing two lists of File type objects
+
+        """
         class File:
             def __init__(self, name, file_type, logical_name):
                 self.name         = name
