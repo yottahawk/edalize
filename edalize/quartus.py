@@ -1,4 +1,5 @@
 import logging
+import pathlib
 import os.path
 import os
 import platform
@@ -141,7 +142,7 @@ class Quartus(Edatool):
                 except (AttributeError, KeyError):
                     # Either a component wasn't found in the QSYS file, or it
                     # had no associated tool information. Make the assumption
-                    # it was a Standard edition file 
+                    # it was a Standard edition file
                     if not self.isPro:
                         name = f.name
             except (ET.ParseError, IOError):
@@ -149,10 +150,9 @@ class Quartus(Edatool):
 
             # Give QSYS files special attributes to make the logic in
             # the Jinja2 templates much simplier
-            setattr(f, "simplename", os.path.basename(f.name).split('.qsys')[0])
-            setattr(f, "srcdir", os.path.dirname(f.name))
-            setattr(f, "dstdir", os.path.join('qsys', f.simplename))
-        
+            setattr(f, "simplename", pathlib.Path(f.name).stem)
+            setattr(f, "srcdir", pathlib.Path(f.name).parent.as_posix())
+            setattr(f, "dstdir", pathlib.Path('qsys', f.simplename).as_posix())
         return name
 
     # Allow the templates to get source file information
@@ -171,7 +171,7 @@ class Quartus(Edatool):
             if self.isPro:
                 return _handle_src(t, f)
             else:
-                f.name = os.path.join(f.dstdir, f.simplename + '.qip')
+                f.name = pathlib.Path(f.dstdir,f.simplename).with_suffix('.qip').as_posix()
                 f.file_type = 'QIP'
                 return _handle_src('QIP_FILE', f)
 
