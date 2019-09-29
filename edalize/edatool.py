@@ -205,12 +205,20 @@ class Edatool(object):
         for _opt in _opts.get('members', []) + _opts.get('lists', []):
             backend_args.add_argument('--'+_opt['name'],
                                       help=_opt['desc'])
-        #Parse arguments
+        for _opt in _opts.get('flags', []):
+            backend_args.add_argument('--'+_opt['name'],
+                                      action='store_true',
+                                      help=_opt['desc'])
+        # Parse arguments (parameters and backend_args), and place into instance variable dicts ('self.tool_options') and ('self.paramtype' for each possible paramtype)
+        backend_flags   = [x['name'] for x in _opts.get('flags', [])]
         backend_members = [x['name'] for x in _opts.get('members', [])]
         backend_lists   = [x['name'] for x in _opts.get('lists', [])]
         for key,value in sorted(vars(parser.parse_args(args)).items()):
 
             if value is None:
+                continue
+            if key in backend_flags:
+                self.tool_options[key] = value
                 continue
             if key in backend_members:
                 self.tool_options[key] = value
